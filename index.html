@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Мои деньги</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--text:#15171c;--muted:#6b7280;--line:#e4e6eb;--accent:#2563eb;--accent-soft:#e8efff;--pos:#15803d;--neg:#c0262d;--input:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--text:#e7e9ee;--muted:#9aa1ad;--line:#2a2f3a;--accent:#6ea8fe;--accent-soft:#1c2740;--pos:#4ade80;--neg:#f87171;--input:#11141a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:22px;margin:0}
+h2{font-size:16px;margin:0 0 10px}
+nav{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:16px}
+nav button{border:1px solid var(--line);background:var(--card);color:var(--text);padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit}
+nav button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.stat .l{color:var(--muted);font-size:13px}
+.stat .v{font-size:22px;font-weight:650;margin-top:2px;font-variant-numeric:tabular-nums}
+.stat .s{color:var(--muted);font-size:12px;margin-top:4px}
+.pos{color:var(--pos)}.neg{color:var(--neg)}.muted{color:var(--muted)}
+.small{font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row.off{opacity:.5}
+input,select{font:inherit;color:var(--text);background:var(--input);border:1px solid var(--line);border-radius:7px;padding:6px 8px;min-width:0}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+input[type=number]{text-align:right}
+.w-name{flex:2 1 160px}.w-amt{flex:1 1 100px;max-width:140px}.w-cur{flex:0 0 80px}.w-day{flex:0 0 70px}.w-acc{flex:1 1 130px}.w-date{flex:0 0 150px}.w-cat{flex:1 1 110px}.w-kind{flex:0 0 100px}
+label.chk{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted);padding:6px 8px}
+.btn.ghost:hover{color:var(--neg)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.hint{color:var(--muted);font-size:13px;margin:4px 0 10px}
+.list .it{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.list .it:first-child{border-top:0}
+.bars .b{display:grid;grid-template-columns:70px 1fr 120px;gap:8px;align-items:center;padding:3px 0;font-size:13px;font-variant-numeric:tabular-nums}
+.bars .track{height:12px;background:var(--accent-soft);border-radius:6px;overflow:hidden}
+.bars .fill{height:100%;background:var(--accent);border-radius:6px}
+.bars .fill.neg{background:var(--neg)}
+.bars .val{text-align:right}
+.tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:5px;background:var(--accent-soft);color:var(--accent);margin-right:6px}
+.empty{color:var(--muted);font-size:14px;padding:8px 0}
+.warn{background:#fff4e5;color:#8a4b00;border:1px solid #f3d19e;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:14px}
+@media (prefers-color-scheme:dark){.warn{background:#2b1f0d;color:#f3c37a;border-color:#5a4220}}
+@media (max-width:560px){.w-amt{max-width:none}.bars .b{grid-template-columns:56px 1fr 96px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Мои деньги</h1>
+    <span class="muted small" id="today"></span>
+  </header>
+  <nav id="nav"></nav>
+  <main id="app"></main>
+</div>
+
+<script>
+const LS = 'money-tracker-v1';
+const FALLBACK_RATES = {USD:1, PLN:3.65, EUR:0.86, UAH:41.5, GBP:0.75, CHF:0.80, CZK:21.5};
+const TABS = [
+  ['overview','Обзор'], ['accounts','Счета'], ['incomes','Доходы'],
+  ['recurring','Ежемесячные расходы'], ['oneoffs','Разовые'], ['settings','Настройки']
+];
+
+// ---------- даты ----------
+const pad = n => String(n).padStart(2,'0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+const today = () => iso(new Date());
+const endOfMonth = (offset=0) => { const d = new Date(); return iso(new Date(d.getFullYear(), d.getMonth()+1+offset, 0)); };
+const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate()+n); return iso(d); };
+const fmtDate = s => parse(s).toLocaleDateString('ru-RU', {day:'numeric', month:'short'});
+const monthKey = s => s.slice(0,7);
+const monthLabel = k => { const [y,m] = k.split('-').map(Number); return new Date(y, m-1, 1).toLocaleDateString('ru-RU', {month:'short', year:'2-digit'}); };
+
+// ---------- состояние ----------
+const uid = () => Math.random().toString(36).slice(2,10);
+const defaults = () => ({
+  base: 'PLN',
+  currencies: ['PLN','EUR','USD','UAH'],
+  rates: {...FALLBACK_RATES}, ratesAt: null,
+  accounts: [], incomes: [], recurring: [], oneoffs: [],
+  lastAccount: null, tab: 'overview', oneoffMonth: null
+});
+let S = load();
+function load(){
+  try { const raw = localStorage.getItem(LS); if (raw) return {...defaults(), ...JSON.parse(raw)}; } catch(e) {}
+  return defaults();
+}
+function save(){
+  try { localStorage.setItem(LS, JSON.stringify(S)); } catch(e) {}
+  render();
+}
+
+// ---------- валюты ----------
+const conv = (v, from, to = S.base) => v / (S.rates[from] || 1) * (S.rates[to] || 1);
+const nf0 = new Intl.NumberFormat('ru-RU', {maximumFractionDigits:0});
+const nf2 = new Intl.NumberFormat('ru-RU', {maximumFractionDigits:2});
+const money = (v, c = S.base, dec = false) => `${(dec ? nf2 : nf0).format(v)} ${c}`;
+const signed = (v, c) => `<span class="${v < 0 ? 'neg' : 'pos'}">${v > 0 ? '+' : ''}${money(v, c, true)}</span>`;
+
+async function refreshRates(force=false){
+  const fresh = S.ratesAt && (Date.now() - S.ratesAt) < 12*3600*1000;
+  if (fresh && !force) return;
+  try {
+    const r = await fetch('https://open.er-api.com/v6/latest/USD');
+    const j = await r.json();
+    if (j.result === 'success') { S.rates = j.rates; S.ratesAt = Date.now(); save(); }
+  } catch(e) { if (force) alert('Не удалось обновить курсы: ' + e.message); }
+}
+
+// ---------- расчёты ----------
+// даты ежемесячного события с днём `day` в интервале (from, to]
+function monthlyDates(day, from, to){
+  const out = []; const a = parse(from), b = parse(to);
+  let y = a.getFullYear(), m = a.getMonth();
+  while (y < b.getFullYear() || (y === b.getFullYear() && m <= b.getMonth())) {
+    const dim = new Date(y, m+1, 0).getDate();
+    const s = iso(new Date(y, m, Math.min(day, dim)));
+    if (s > from && s <= to) out.push(s);
+    if (++m > 11) { m = 0; y++; }
+  }
+  return out;
+}
+// все движения денег в интервале (from, to]
+function events(from, to){
+  const ev = [];
+  for (const i of S.incomes) if (i.active !== false)
+    for (const d of monthlyDates(+i.day || 1, from, to))
+      ev.push({date:d, name:i.name, amount:+i.amount || 0, currency:i.currency, account:i.account, kind:'income'});
+  for (const r of S.recurring) if (r.active !== false)
+    for (const d of monthlyDates(+r.day || 1, from, to))
+      ev.push({date:d, name:r.name, amount:-(+r.amount || 0), currency:r.currency, account:r.account, kind:'recurring', category:r.category});
+  for (const o of S.oneoffs) if (o.date > from && o.date <= to)
+    ev.push({date:o.date, name:o.name, amount:(o.type === 'income' ? 1 : -1) * (+o.amount || 0), currency:o.currency, account:o.account, kind:'oneoff', category:o.category});
+  return ev.sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+}
+// баланс каждого счёта на дату: сумма снимка + движения после даты снимка
+function accountAt(acc, date){
+  let v = +acc.amount || 0;
+  if (date > acc.asOf)
+    for (const e of events(acc.asOf, date))
+      if (e.account === acc.id) v += conv(e.amount, e.currency, acc.currency);
+  return v;
+}
+const totalAt = date => S.accounts.reduce((s, a) => s + conv(accountAt(a, date), a.currency), 0);
+const accName = id => (S.accounts.find(a => a.id === id) || {}).name || '— без счёта —';
+const monthlySum = list => list.filter(x => x.active !== false).reduce((s, x) => s + conv(+x.amount || 0, x.currency), 0);
+
+// ---------- рендер ----------
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function curList(){ const set = new Set(S.currencies); [...S.accounts, ...S.incomes, ...S.recurring, ...S.oneoffs].forEach(x => x.currency && set.add(x.currency)); return [...set]; }
+const curSelect = (attrs, val) => `<select ${attrs} class="w-cur">${curList().map(c => `<option ${c === val ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
+const accSelect = (attrs, val) => `<select ${attrs} class="w-acc">${S.accounts.length ? '' : '<option value="">нет счетов</option>'}${S.accounts.map(a => `<option value="${a.id}" ${a.id === val ? 'selected' : ''}>${esc(a.name)} (${a.currency})</option>`).join('')}</select>`;
+const f = (list, id, key) => `data-list="${list}" data-id="${id}" data-key="${key}"`;
+
+function render(){
+  document.getElementById('today').textContent = new Date().toLocaleDateString('ru-RU', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  document.getElementById('nav').innerHTML = TABS.map(([k,l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${l}</button>`).join('');
+  const views = {overview, accounts, incomes, recurring, oneoffs, settings};
+  document.getElementById('app').innerHTML = views[S.tab]();
+}
+
+function overview(){
+  if (!S.accounts.length) return `<div class="card"><h2>С чего начать</h2>
+    <p>1. Во вкладке <b>Счета</b> впиши, сколько денег у тебя сейчас и где (каждый счёт — в своей валюте).</p>
+    <p>2. В <b>Доходах</b> — зарплаты: сколько, в какой валюте и какого числа приходят.</p>
+    <p>3. В <b>Ежемесячных расходах</b> — аренда, подписки, связь и т.п.</p>
+    <p>4. Разовые траты дописывай во вкладке <b>Разовые</b> — баланс пересчитается сам.</p>
+    <button class="btn primary" data-tab="accounts">Добавить счета</button></div>`;
+
+  const t = today(), now = totalAt(t), eom = totalAt(endOfMonth());
+  const inc = monthlySum(S.incomes), rec = monthlySum(S.recurring);
+  const mk = monthKey(t);
+  const oneoffMonth = S.oneoffs.filter(o => monthKey(o.date) === mk && o.type !== 'income').reduce((s, o) => s + conv(+o.amount || 0, o.currency), 0);
+  const orphans = [...S.incomes, ...S.recurring, ...S.oneoffs].filter(x => !S.accounts.some(a => a.id === x.account)).length;
+
+  const perCur = {};
+  for (const a of S.accounts) perCur[a.currency] = (perCur[a.currency] || 0) + accountAt(a, t);
+
+  const upcoming = events(t, addDays(t, 30));
+  const forecast = Array.from({length:12}, (_, i) => { const d = endOfMonth(i); return [monthKey(d), totalAt(d)]; });
+  const max = Math.max(1, ...forecast.map(x => Math.abs(x[1])));
+
+  const byCat = {};
+  for (const o of S.oneoffs) if (monthKey(o.date) === mk && o.type !== 'income') { const c = o.category || 'Без категории'; byCat[c] = (byCat[c] || 0) + conv(+o.amount || 0, o.currency); }
+
+  return `
+  ${orphans ? `<div class="warn">${orphans} записей привязаны к удалённому счёту и не учитываются — выбери им счёт.</div>` : ''}
+  <div class="grid">
+    <div class="stat"><div class="l">Сейчас (оценка)</div><div class="v">${money(now)}</div>
+      <div class="s">${Object.entries(perCur).map(([c,v]) => money(v, c)).join(' · ')}</div></div>
+    <div class="stat"><div class="l">К концу месяца</div><div class="v ${eom < now ? '' : 'pos'}">${money(eom)}</div>
+      <div class="s">${eom >= now ? '+' : ''}${money(eom - now)} до ${fmtDate(endOfMonth())}</div></div>
+    <div class="stat"><div class="l">Свободно в месяц</div><div class="v ${inc - rec < 0 ? 'neg' : 'pos'}">${money(inc - rec)}</div>
+      <div class="s">доход ${money(inc)} − регулярные ${money(rec)}</div></div>
+    <div class="stat"><div class="l">Разовые траты в этом месяце</div><div class="v">${money(oneoffMonth)}</div>
+      <div class="s">${inc - rec ? `${nf0.format(oneoffMonth / Math.max(1, inc - rec) * 100)}% от свободных` : ''}</div></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+    <div class="card" style="margin:0"><h2>Ближайшие 30 дней</h2>
+      ${upcoming.length ? `<div class="list">${upcoming.map(e => `<div class="it"><span><span class="muted">${fmtDate(e.date)}</span> · ${esc(e.name) || '—'}</span>${signed(e.amount, e.currency)}</div>`).join('')}</div>` : '<div class="empty">Ничего не запланировано</div>'}
+    </div>
+    <div class="card" style="margin:0"><h2>Прогноз на конец месяца</h2>
+      <div class="bars">${forecast.map(([k, v]) => `<div class="b"><span class="muted">${monthLabel(k)}</span>
+        <div class="track"><div class="fill ${v < 0 ? 'neg' : ''}" style="width:${Math.abs(v) / max * 100}%"></div></div>
+        <span class="val ${v < 0 ? 'neg' : ''}">${money(v)}</span></div>`).join('')}</div>
+      <div class="hint" style="margin-top:8px">С учётом зарплат, ежемесячных и уже вписанных будущих разовых.</div>
+    </div>
+  </div>
+
+  ${Object.keys(byCat).length ? `<div class="card"><h2>Разовые траты по категориям — ${monthLabel(mk)}</h2><div class="list">
+    ${Object.entries(byCat).sort((a,b) => b[1] - a[1]).map(([c, v]) => `<div class="it"><span>${esc(c)}</span><span>${money(v, S.base, true)}</span></div>`).join('')}</div></div>` : ''}`;
+}
+
+function accounts(){
+  const t = today();
+  return `<div class="card"><h2>Счета и наличные</h2>
+    <div class="hint">Впиши, сколько денег на каждом счёте <b>на дату снимка</b>. Дальше баланс считается сам: + зарплаты, − регулярные и разовые расходы после этой даты.
+    Когда захочешь сверить с реальностью — просто впиши актуальную сумму, дата снимка станет сегодняшней.</div>
+    ${S.accounts.map(a => { const cur = accountAt(a, t); return `<div class="row">
+      <input class="w-name" placeholder="Название (PKO, Monobank, нал...)" value="${esc(a.name)}" ${f('accounts', a.id, 'name')}>
+      ${curSelect(f('accounts', a.id, 'currency'), a.currency)}
+      <input class="w-amt" type="number" step="0.01" value="${a.amount}" ${f('accounts', a.id, 'amount')} title="Сумма на дату снимка">
+      <input class="w-date" type="date" value="${a.asOf}" ${f('accounts', a.id, 'asOf')} title="Дата снимка">
+      <span class="small" style="flex:1 1 140px">сейчас ≈ <b>${money(cur, a.currency, true)}</b>${a.currency !== S.base ? ` <span class="muted">(${money(conv(cur, a.currency))})</span>` : ''}</span>
+      <button class="btn ghost" data-del="accounts" data-id="${a.id}" title="Удалить">✕</button></div>`; }).join('') || '<div class="empty">Пока нет счетов</div>'}
+    <div class="toolbar"><button class="btn primary" data-add="accounts">+ Счёт</button></div></div>`;
+}
+
+function regularList(list, title, hint, withCat){
+  const items = S[list];
+  return `<div class="card"><h2>${title}</h2><div class="hint">${hint}</div>
+    ${items.map(x => `<div class="row ${x.active === false ? 'off' : ''}">
+      <input class="w-name" placeholder="Название" value="${esc(x.name)}" ${f(list, x.id, 'name')}>
+      <input class="w-amt" type="number" step="0.01" placeholder="Сумма" value="${x.amount}" ${f(list, x.id, 'amount')}>
+      ${curSelect(f(list, x.id, 'currency'), x.currency)}
+      <input class="w-day" type="number" min="1" max="31" value="${x.day}" ${f(list, x.id, 'day')} title="Число месяца">
+      ${accSelect(f(list, x.id, 'account'), x.account)}
+      ${withCat ? `<input class="w-cat" placeholder="Категория" list="cats" value="${esc(x.category)}" ${f(list, x.id, 'category')}>` : ''}
+      <label class="chk"><input type="checkbox" ${x.active !== false ? 'checked' : ''} ${f(list, x.id, 'active')}>активно</label>
+      <button class="btn ghost" data-del="${list}" data-id="${x.id}" title="Удалить">✕</button></div>`).join('') || '<div class="empty">Пусто</div>'}
+    <div class="toolbar"><button class="btn primary" data-add="${list}">+ Добавить</button>
+      <span class="muted small">Итого в месяц: <b>${money(monthlySum(items))}</b></span></div></div>${catsDatalist()}`;
+}
+const incomes = () => regularList('incomes', 'Зарплаты и регулярные доходы', 'Сумма, валюта, <b>число месяца</b>, когда приходит, и на какой счёт. Если день больше, чем дней в месяце, считается последний день.', false);
+const recurring = () => regularList('recurring', 'Ежемесячные расходы', 'Аренда, коммуналка, подписки, связь, кредит… Сумма, валюта, число списания и с какого счёта.', true);
+
+function catsDatalist(){
+  const cats = new Set(['Еда','Кафе','Транспорт','Покупки','Здоровье','Развлечения','Путешествия','Подарки','Дом']);
+  [...S.recurring, ...S.oneoffs].forEach(x => x.category && cats.add(x.category));
+  return `<datalist id="cats">${[...cats].map(c => `<option value="${esc(c)}">`).join('')}</datalist>`;
+}
+
+function oneoffs(){
+  const months = [...new Set([monthKey(today()), ...S.oneoffs.map(o => monthKey(o.date))])].sort().reverse();
+  const sel = S.oneoffMonth && months.includes(S.oneoffMonth) ? S.oneoffMonth : months[0];
+  const items = S.oneoffs.filter(o => monthKey(o.date) === sel).sort((a,b) => a.date < b.date ? 1 : -1);
+  const spent = items.filter(o => o.type !== 'income').reduce((s, o) => s + conv(+o.amount || 0, o.currency), 0);
+  const got = items.filter(o => o.type === 'income').reduce((s, o) => s + conv(+o.amount || 0, o.currency), 0);
+  const defAcc = S.accounts.some(a => a.id === S.lastAccount) ? S.lastAccount : S.accounts[0]?.id;
+  const defCur = (S.accounts.find(a => a.id === defAcc) || {}).currency || S.base;
+  return `<div class="card"><h2>Добавить разовую операцию</h2>
+    <form id="addOneoff" class="row" style="border:0;padding:0">
+      <select name="type" class="w-kind"><option value="expense">Расход</option><option value="income">Доход</option></select>
+      <input name="date" type="date" class="w-date" value="${today()}" required>
+      <input name="name" class="w-name" placeholder="На что (Biedronka, такси...)">
+      <input name="amount" type="number" step="0.01" class="w-amt" placeholder="Сумма" required>
+      ${curSelect('name="currency" id="ooCur"', defCur)}
+      ${accSelect('name="account" id="ooAcc"', defAcc)}
+      <input name="category" class="w-cat" placeholder="Категория" list="cats">
+      <button class="btn primary" type="submit">Добавить</button>
+    </form></div>
+  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+      <h2 style="margin:0">Операции</h2>
+      <select id="ooMonth">${months.map(m => `<option value="${m}" ${m === sel ? 'selected' : ''}>${monthLabel(m)}</option>`).join('')}</select></div>
+    <div class="hint">Потрачено: <b>${money(spent)}</b>${got ? ` · получено: <b>${money(got)}</b>` : ''}</div>
+    ${items.map(o => `<div class="row">
+      <select class="w-kind" ${f('oneoffs', o.id, 'type')}><option value="expense" ${o.type !== 'income' ? 'selected' : ''}>Расход</option><option value="income" ${o.type === 'income' ? 'selected' : ''}>Доход</option></select>
+      <input type="date" class="w-date" value="${o.date}" ${f('oneoffs', o.id, 'date')}>
+      <input class="w-name" value="${esc(o.name)}" ${f('oneoffs', o.id, 'name')}>
+      <input type="number" step="0.01" class="w-amt" value="${o.amount}" ${f('oneoffs', o.id, 'amount')}>
+      ${curSelect(f('oneoffs', o.id, 'currency'), o.currency)}
+      ${accSelect(f('oneoffs', o.id, 'account'), o.account)}
+      <input class="w-cat" list="cats" value="${esc(o.category)}" ${f('oneoffs', o.id, 'category')}>
+      <button class="btn ghost" data-del="oneoffs" data-id="${o.id}" title="Удалить">✕</button></div>`).join('') || '<div class="empty">В этом месяце разовых операций нет</div>'}
+  </div>${catsDatalist()}`;
+}
+
+function settings(){
+  const others = curList().filter(c => c !== S.base);
+  return `<div class="card"><h2>Основная валюта</h2>
+    <div class="hint">В ней показываются итоги и прогноз.</div>
+    ${curSelect('id="base"', S.base)}</div>
+  <div class="card"><h2>Валюты в списках</h2>
+    <div class="hint">Коды через запятую (ISO, например PLN, EUR, USD, UAH, GBP, CHF).</div>
+    <input id="curs" style="width:100%" value="${esc(S.currencies.join(', '))}"></div>
+  <div class="card"><h2>Курсы</h2>
+    <div class="hint">${S.ratesAt ? 'Обновлены ' + new Date(S.ratesAt).toLocaleString('ru-RU') + ' (open.er-api.com)' : 'Используются примерные курсы по умолчанию — нажми «Обновить».'}</div>
+    <div class="list">${others.map(c => `<div class="it"><span>1 ${c}</span><span>${S.rates[c] ? money(conv(1, c), S.base, true) : '<span class="neg">нет курса</span>'}</span></div>`).join('')}</div>
+    <div class="toolbar"><button class="btn" id="rates">Обновить курсы</button></div></div>
+  <div class="card"><h2>Данные</h2>
+    <div class="hint">Всё хранится только в этом браузере (localStorage). Делай экспорт для бэкапа или чтобы перенести на другое устройство.</div>
+    <div class="toolbar">
+      <button class="btn" id="export">Экспорт JSON</button>
+      <label class="btn">Импорт JSON<input type="file" id="import" accept="application/json" hidden></label>
+      <button class="btn" id="reset" style="color:var(--neg)">Стереть всё</button>
+    </div></div>`;
+}
+
+// ---------- события ----------
+function newItem(list){
+  const acc = S.accounts[0];
+  const cur = acc ? acc.currency : S.base;
+  if (list === 'accounts') return {id:uid(), name:'', currency:S.base, amount:0, asOf:today()};
+  if (list === 'incomes') return {id:uid(), name:'Зарплата', amount:0, currency:cur, day:10, account:acc?.id, active:true};
+  return {id:uid(), name:'', amount:0, currency:cur, day:1, account:acc?.id, category:'', active:true};
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab],[data-add],[data-del],#rates,#export,#reset');
+  if (!t) return;
+  if (t.dataset.tab) { S.tab = t.dataset.tab; save(); window.scrollTo(0,0); }
+  else if (t.dataset.add) { S[t.dataset.add].push(newItem(t.dataset.add)); save(); }
+  else if (t.dataset.del) {
+    const list = t.dataset.del, id = t.dataset.id;
+    const item = S[list].find(x => x.id === id);
+    if (list === 'accounts') {
+      const used = [...S.incomes, ...S.recurring, ...S.oneoffs].filter(x => x.account === id);
+      if (!confirm(`Удалить счёт «${item.name || 'без названия'}»?` + (used.length ? ` К нему привязано записей: ${used.length}.` : ''))) return;
+    } else if (list !== 'oneoffs' && !confirm(`Удалить «${item.name || 'без названия'}»?`)) return;
+    S[list] = S[list].filter(x => x.id !== id); save();
+  }
+  else if (t.id === 'rates') refreshRates(true);
+  else if (t.id === 'export') {
+    const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `money-${today()}.json`; a.click();
+  }
+  else if (t.id === 'reset' && confirm('Стереть все данные? Это нельзя отменить.')) { S = defaults(); save(); }
+});
+
+document.addEventListener('change', e => {
+  const el = e.target, d = el.dataset;
+  if (d.list) {
+    const item = S[d.list].find(x => x.id === d.id); if (!item) return;
+    let v = el.type === 'checkbox' ? el.checked : el.value;
+    if (['amount','day'].includes(d.key)) v = parseFloat(String(v).replace(',', '.')) || 0;
+    if (d.key === 'day') v = Math.min(31, Math.max(1, Math.round(v)));
+    item[d.key] = v;
+    // новая сумма на счёте = новый снимок на сегодня
+    if (d.list === 'accounts' && d.key === 'amount') item.asOf = today();
+    save();
+  }
+  else if (el.id === 'ooAcc') { const a = S.accounts.find(x => x.id === el.value); if (a) document.getElementById('ooCur').value = a.currency; }
+  else if (el.id === 'ooMonth') { S.oneoffMonth = el.value; save(); }
+  else if (el.id === 'base') { S.base = el.value; save(); }
+  else if (el.id === 'curs') { S.currencies = el.value.split(/[\s,;]+/).map(s => s.trim().toUpperCase()).filter(s => /^[A-Z]{3,5}$/.test(s)); save(); }
+  else if (el.id === 'import' && el.files[0]) {
+    el.files[0].text().then(txt => {
+      try { const data = JSON.parse(txt); if (!Array.isArray(data.accounts)) throw new Error('не тот формат');
+        if (confirm('Заменить текущие данные импортированными?')) { S = {...defaults(), ...data}; save(); } }
+      catch(err) { alert('Не удалось импортировать: ' + err.message); }
+    });
+  }
+});
+
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'addOneoff') return;
+  e.preventDefault();
+  const fd = Object.fromEntries(new FormData(e.target));
+  const amount = parseFloat(String(fd.amount).replace(',', '.'));
+  if (!amount) return;
+  S.oneoffs.push({id:uid(), type:fd.type, date:fd.date, name:fd.name.trim(), amount, currency:fd.currency, account:fd.account, category:fd.category.trim()});
+  S.lastAccount = fd.account; S.oneoffMonth = monthKey(fd.date);
+  save();
+  document.querySelector('#addOneoff [name=name]')?.focus();
+});
+
+render();
+refreshRates();
+</script>
+</body>
+</html>
