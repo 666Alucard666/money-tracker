@@ -197,7 +197,7 @@ function overview(){
   ${orphans ? `<div class="warn">${orphans} записей привязаны к удалённому счёту и не учитываются — выбери им счёт.</div>` : ''}
   <div class="grid">
     <div class="stat"><div class="l">Сейчас (оценка)</div><div class="v">${money(now)}</div>
-      <div class="s">${Object.entries(perCur).map(([c,v]) => money(v, c)).join(' · ')}</div></div>
+      <div class="s">${Object.entries(perCur).map(([c,v]) => c === S.base ? money(v, c) : `${money(v, c)} ≈ ${money(conv(v, c))}`).join(' · ')}</div></div>
     <div class="stat"><div class="l">К концу месяца</div><div class="v ${eom < now ? '' : 'pos'}">${money(eom)}</div>
       <div class="s">${eom >= now ? '+' : ''}${money(eom - now)} до ${fmtDate(endOfMonth())}</div></div>
     <div class="stat"><div class="l">Свободно в месяц</div><div class="v ${inc - rec < 0 ? 'neg' : 'pos'}">${money(inc - rec)}</div>
@@ -205,6 +205,12 @@ function overview(){
     <div class="stat"><div class="l">Разовые траты в этом месяце</div><div class="v">${money(oneoffMonth)}</div>
       <div class="s">${inc - rec ? `${nf0.format(oneoffMonth / Math.max(1, inc - rec) * 100)}% от свободных` : ''}</div></div>
   </div>
+
+  <div class="card"><h2>Сбережения в ${S.base}</h2><div class="list">
+    ${S.accounts.map(a => { const v = accountAt(a, t); return `<div class="it">
+      <span>${esc(a.name) || '—'}${a.currency !== S.base ? ` <span class="muted small">${money(v, a.currency, true)} · 1 ${a.currency} = ${conv(1, a.currency).toLocaleString('ru-RU', {maximumSignificantDigits:4})} ${S.base}</span>` : ''}</span>
+      <b>${money(conv(v, a.currency), S.base, true)}</b></div>`; }).join('')}
+    <div class="it"><span>Итого</span><b>${money(now, S.base, true)}</b></div></div></div>
 
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
     <div class="card" style="margin:0"><h2>Ближайшие 30 дней</h2>
